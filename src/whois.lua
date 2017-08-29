@@ -29,6 +29,7 @@ local _parsePlain = function(str)
 	local tmp = {}
 	local whois = nil
 	for line in string.gmatch(str, '(.-)\r?\n') do
+		if string.match(line, '^%>>>') then break end
 		if string.match(line, '^%a') then
 			key = string.gsub(line, ':%s+.+', '')
 			value = string.gsub(line, '%a+:%s+', '')
@@ -51,7 +52,8 @@ local _server = {
 	-- ip address registrar
 	ripe = { host = 'whois.ripe.net', port = 43 },
 	-- local domain registrar
-	de = { host = 'whois.denic.de', port = 43, args = '-T dn', parser = _parseDomain }
+	de = { host = 'whois.denic.de', port = 43, args = '-T dn', parser = _parseDomain },
+	org = { host = 'whois.pir.org', port = 43, parser = _parsePlain }
 }
 
 local _parse = function(str, provider)
