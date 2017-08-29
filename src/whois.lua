@@ -4,15 +4,6 @@ local socket = require('socket')
 
 local whois = {}
 
-local _server = {
-	-- discovery
-	iana = { host = 'whois.iana.org', port = 43 },
-	-- ip address registrar
-	ripe = { host = 'whois.ripe.net', port = 43 },
-	-- local domain registrar
-	de = { host = 'whois.denic.de', port = 43, args = '-T dn', parser = _parseDomain }
-}
-
 local _parseDomain = function(str)
         local obj = {
 		generic = {}
@@ -33,9 +24,47 @@ local _parseDomain = function(str)
 	return obj
 end
 
+local _parsePlain = function(str)
+	local obj = {}
+	local tmp = {}
+	local whois = nil
+	for line in string.gmatch(str, '(.-)\r?\n') do
+		if string.match(line, '^%a') then
+			key = string.gsub(line, ':%s+.+', '')
+			value = string.gsub(line, '%a+:%s+', '')
+			tmp[key] = value
+
+			if key == 'whois' then
+				whois = value
+			end
+		end
+		if line == '' and #tmp ~= 0 then
+			table.insert(obj, tmp)
+		end
+	end
+	return obj, whois
+end
+
+local _server = {
+	-- discovery
+	iana = { host = 'whois.iana.org', port = 43, parser = _parsePlain },
+	-- ip address registrar
+	ripe = { host = 'whois.ripe.net', port = 43 },
+	-- local domain registrar
+	de = { host = 'whois.denic.de', port = 43, args = '-T dn', parser = _parseDomain }
+}
+
 local _parse = function(str, provider)
 	if (_server[provider] or {}).parser then
-		return _server[provider].parser(str)
+		local result, whois = _server[provider].parser(str)
+		if whois then
+			for k, v in pairs(_server) do
+				if v.host == whois then
+					return result, k
+				end
+			end
+		end
+		return result
 	else
 		return str
 	end
@@ -66,7 +95,11 @@ function whois.query(self, provider, resource)
 		tcp:send(query .. '\r\n')
 		local response = tcp:receive('*a')
 		tcp:close()
-		return _parse(response, provider)
+		local result, whois =  _parse(response, provider)
+		if whois then
+			return self:query(whois, resource)
+		end
+		return result
 	end
 	return nil
 end
